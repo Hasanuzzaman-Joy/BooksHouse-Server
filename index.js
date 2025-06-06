@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -30,9 +30,37 @@ async function run() {
 
     const bookCollections = client.db('booksDB').collection('books');
 
-    app.post('/add-book', async(req,res)=>{
+
+    app.get('/books', async (req, res) => {
+      const email = req.query.email;
+
+      let query = {};
+      if (email) {
+        query = { email: email }
+      }
+
+      const result = await bookCollections.find(query).toArray();
+      res.send(result);
+    })
+
+    app.get('/book/:id', async (req, res) => {
+      const id = req.params.id;
+      let filter = {_id : new ObjectId(id)};
+      const result = await bookCollections.findOne(filter);
+      res.send(result);
+    })
+
+    app.post('/add-book', async (req, res) => {
       const data = req.body;
+      data.total_page = parseInt(data.total_page);
       const result = await bookCollections.insertOne(data);
+      res.send(result);
+    })
+    
+    app.patch('/update-book/:id', async (req, res) => {
+      const id = req.params.id;
+      let filter = {_id : new ObjectId(id)};
+      const result = await bookCollections.updateOne(filter);
       res.send(result);
     })
 
