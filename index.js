@@ -58,11 +58,23 @@ async function run() {
     })
     
     app.patch('/update-book/:id', async (req, res) => {
+      const data = req.body;
       const id = req.params.id;
       let filter = {_id : new ObjectId(id)};
-      const result = await bookCollections.updateOne(filter);
+      const doc = {
+        $set : data
+      }
+      const result = await bookCollections.updateOne(filter,doc);
       res.send(result);
     })
+
+    app.delete('/books/:id', async(req,res) =>{
+      const id = req.params.id;
+      let filter = {_id : new ObjectId(id)};
+      const result = await bookCollections.deleteOne(filter);
+      res.send(result);
+    })
+
 
 
     // Send a ping to confirm a successful connection
