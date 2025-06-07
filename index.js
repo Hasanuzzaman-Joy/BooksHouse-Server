@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const admin = require("firebase-admin");
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -9,10 +10,17 @@ const cors = require('cors')
 app.use(cors());
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Server is running')
-})
 
+
+// Firebase
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf-8');
+const serviceAccount = JSON.parse(decoded);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+// MongoDB
 const uri = process.env.MONGODB_URI;
 
 const client = new MongoClient(uri, {
@@ -31,7 +39,7 @@ async function run() {
     const bookCollections = client.db('booksDB').collection('books');
 
 
-    app.get('/books', async (req, res) => {
+    app.get('/books', verifyToken, verifyTokenEmail, async (req, res) => {
       const email = req.query.email;
 
       let query = {};
@@ -45,7 +53,7 @@ async function run() {
 
     app.get('/book/:id', async (req, res) => {
       const id = req.params.id;
-      let filter = {_id : new ObjectId(id)};
+      let filter = { _id: new ObjectId(id) };
       const result = await bookCollections.findOne(filter);
       res.send(result);
     })
@@ -56,21 +64,21 @@ async function run() {
       const result = await bookCollections.insertOne(data);
       res.send(result);
     })
-    
+
     app.patch('/update-book/:id', async (req, res) => {
       const data = req.body;
       const id = req.params.id;
-      let filter = {_id : new ObjectId(id)};
+      let filter = { _id: new ObjectId(id) };
       const doc = {
-        $set : data
+        $set: data
       }
-      const result = await bookCollections.updateOne(filter,doc);
+      const result = await bookCollections.updateOne(filter, doc);
       res.send(result);
     })
 
-    app.delete('/books/:id', async(req,res) =>{
+    app.delete('/books/:id', async (req, res) => {
       const id = req.params.id;
-      let filter = {_id : new ObjectId(id)};
+      let filter = { _id: new ObjectId(id) };
       const result = await bookCollections.deleteOne(filter);
       res.send(result);
     })
