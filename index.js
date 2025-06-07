@@ -10,7 +10,31 @@ const cors = require('cors')
 app.use(cors());
 app.use(express.json());
 
+const verifyToken = async (req, res, next) => {
+  const authHeaders = req.headers.authorization;
+  if (!authHeaders || !authHeaders.startsWith('Bearer ')) {
+    return res.status(401).send({ message: 'Access denied: Invalid token provided.' })
+  }
+  const token = authHeaders.split(' ')[1];
 
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.decoded = decoded;
+  }
+  catch (error) {
+    return res.status(401).send({ message: 'Access denied: Failed to verify token.' })
+  }
+  next();
+}
+
+const verifyTokenEmail = async (req, res, next) => {
+  if (req.query.email) {
+    if (req.query.email !== req.decoded.email) {
+      res.status(403).send({ message: 'Access forbidden: Email does not match authenticated user.' })
+    }
+  }
+  next()
+}
 
 // Firebase
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf-8');
