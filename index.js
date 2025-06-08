@@ -15,7 +15,7 @@ const verifyToken = async (req, res, next) => {
   if (!authHeaders || !authHeaders.startsWith('Bearer ')) {
     return res.status(401).send({ message: 'Access denied: Invalid token provided.' })
   }
-  
+
   const token = authHeaders.split(' ')[1];
 
   try {
@@ -62,6 +62,7 @@ async function run() {
     await client.connect();
 
     const bookCollections = client.db('booksDB').collection('books');
+    const reviewCollections = client.db('booksDB').collection('reviews');
 
     app.get('/all-books', async (req, res) => {
       const result = await bookCollections.find().toArray();
@@ -70,7 +71,7 @@ async function run() {
 
     app.get('/books', verifyToken, verifyTokenEmail, async (req, res) => {
       const email = req.query.email;
-      let query = {email: email};
+      let query = { email: email };
       const result = await bookCollections.find(query).toArray();
       res.send(result);
     })
@@ -82,10 +83,30 @@ async function run() {
       res.send(result);
     })
 
+    app.get('/all-reviews/:id', async (req, res) => {
+      const id = req.params.id;
+      let filter = { reviewedBookId: id };
+      const result = await reviewCollections.find(filter).toArray();
+      res.send(result)
+    })
+
     app.post('/add-book', async (req, res) => {
       const data = req.body;
       data.total_page = parseInt(data.total_page);
       const result = await bookCollections.insertOne(data);
+      res.send(result);
+    })
+
+    app.post('/reviews', async (req, res) => {
+      const review = req.body;
+      const email = review.reviewerEmail;
+      
+      const existingUser = await reviewCollections.findOne({reviewerEmail:email});
+      if(existingUser){
+        return res.status(400).send({message: "You have already added a review"})
+      }
+
+      const result = await reviewCollections.insertOne(review);
       res.send(result);
     })
 
@@ -104,11 +125,11 @@ async function run() {
       const data = req.body;
       const id = data.id;
       const readingStatus = data.status;
-      const filter = {_id : new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
 
       const doc = {
-        $set:{
-          reading_status :readingStatus
+        $set: {
+          reading_status: readingStatus
         }
       }
 
