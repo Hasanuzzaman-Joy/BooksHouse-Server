@@ -100,10 +100,13 @@ async function run() {
     app.post('/reviews', async (req, res) => {
       const review = req.body;
       const email = review.reviewerEmail;
-      
-      const existingUser = await reviewCollections.findOne({reviewerEmail:email});
-      if(existingUser){
-        return res.status(400).send({message: "You have already added a review"})
+      const commentedBook = review.reviewedBookId;
+
+      const existingUser = await reviewCollections.findOne({ reviewerEmail: email });
+      const existingComment = await reviewCollections.findOne({ reviewedBookId: commentedBook });
+
+      if (existingUser && existingComment) {
+        return res.status(400).send({ message: "You have already added a review" })
       }
 
       const result = await reviewCollections.insertOne(review);
@@ -120,6 +123,25 @@ async function run() {
       const result = await bookCollections.updateOne(filter, doc);
       res.send(result);
     })
+
+    app.patch('/upvote/:id', async (req, res) => {
+      const { email } = req.body;
+      const id = req.params.id;
+
+      const filter = { _id: new ObjectId(id) };
+      const book = await bookCollections.findOne(filter); 
+
+      if (book?.email === email) {
+        return res.send({ message: 'You cannot upvote your own book' });
+      }
+
+      const updateDoc = {
+        $push: { upvote: email }
+      };
+
+      const result = await bookCollections.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
     app.patch('/book/:id', async (req, res) => {
       const data = req.body;
@@ -144,7 +166,12 @@ async function run() {
       res.send(result);
     })
 
-
+    app.delete('/reviews/:id', async (req, res) => {
+      const id = req.params.id;
+      let filter = { _id: new ObjectId(id) };
+      const result = await reviewCollections.deleteOne(filter);
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
