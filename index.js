@@ -102,16 +102,19 @@ async function run() {
       const email = review.reviewerEmail;
       const commentedBook = review.reviewedBookId;
 
-      const existingUser = await reviewCollections.findOne({ reviewerEmail: email });
-      const existingComment = await reviewCollections.findOne({ reviewedBookId: commentedBook });
+      const existingReview = await reviewCollections.findOne({
+        reviewerEmail: email,
+        reviewedBookId: commentedBook
+      });
 
-      if (existingUser && existingComment) {
-        return res.status(400).send({ message: "You have already added a review" })
+      if (existingReview) {
+        return res.send({ message: "You have already added a review for this book" });
       }
 
       const result = await reviewCollections.insertOne(review);
       res.send(result);
-    })
+    });
+
 
     app.patch('/update-book/:id', async (req, res) => {
       const data = req.body;
@@ -129,7 +132,7 @@ async function run() {
       const id = req.params.id;
 
       const filter = { _id: new ObjectId(id) };
-      const book = await bookCollections.findOne(filter); 
+      const book = await bookCollections.findOne(filter);
 
       if (book?.email === email) {
         return res.send({ message: 'You cannot upvote your own book' });
@@ -145,7 +148,7 @@ async function run() {
 
     app.patch('/book/:id', async (req, res) => {
       const data = req.body;
-      const id = data.id;
+      const id = req.params.id; //data.id
       const readingStatus = data.status;
       const filter = { _id: new ObjectId(id) };
 
@@ -156,6 +159,23 @@ async function run() {
       }
 
       const result = await bookCollections.updateOne(filter, doc);
+      res.send(result);
+    })
+
+    app.patch('/update-review/:id', async (req, res) => {
+      const review = req.body;
+      const id = req.params.id;
+
+      const newReview = review.comment;
+      const filter = { _id: new ObjectId(id) };
+
+      const doc = {
+        $set: {
+          comment: newReview
+        }
+      }
+
+      const result = await reviewCollections.updateOne(filter, doc);
       res.send(result);
     })
 
