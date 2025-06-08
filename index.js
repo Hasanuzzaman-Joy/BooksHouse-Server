@@ -15,6 +15,7 @@ const verifyToken = async (req, res, next) => {
   if (!authHeaders || !authHeaders.startsWith('Bearer ')) {
     return res.status(401).send({ message: 'Access denied: Invalid token provided.' })
   }
+  
   const token = authHeaders.split(' ')[1];
 
   try {
@@ -22,7 +23,7 @@ const verifyToken = async (req, res, next) => {
     req.decoded = decoded;
   }
   catch (error) {
-    return res.status(401).send({ message: 'Access denied: Failed to verify token.' })
+    return res.status(401).send({ message: 'Access denied: Failed to verify token.' });
   }
   next();
 }
@@ -62,15 +63,14 @@ async function run() {
 
     const bookCollections = client.db('booksDB').collection('books');
 
+    app.get('/all-books', async (req, res) => {
+      const result = await bookCollections.find().toArray();
+      res.send(result);
+    })
 
     app.get('/books', verifyToken, verifyTokenEmail, async (req, res) => {
       const email = req.query.email;
-
-      let query = {};
-      if (email) {
-        query = { email: email }
-      }
-
+      let query = {email: email};
       const result = await bookCollections.find(query).toArray();
       res.send(result);
     })
@@ -96,6 +96,22 @@ async function run() {
       const doc = {
         $set: data
       }
+      const result = await bookCollections.updateOne(filter, doc);
+      res.send(result);
+    })
+
+    app.patch('/book/:id', async (req, res) => {
+      const data = req.body;
+      const id = data.id;
+      const readingStatus = data.status;
+      const filter = {_id : new ObjectId(id)};
+
+      const doc = {
+        $set:{
+          reading_status :readingStatus
+        }
+      }
+
       const result = await bookCollections.updateOne(filter, doc);
       res.send(result);
     })
