@@ -65,7 +65,23 @@ async function run() {
     const reviewCollections = client.db('booksDB').collection('reviews');
 
     app.get('/all-books', async (req, res) => {
-      const result = await bookCollections.find().toArray();
+      const filteredStatus = req.query.filteredStatus;
+      const searchParams = req.query.searchParams;
+
+      const filter = {};
+
+      if (filteredStatus) {
+        filter.reading_status = filteredStatus;
+      }
+
+      if (searchParams) {
+        filter.$or = [
+          { book_title: { $regex: searchParams, $options: 'i' } },
+          { book_author: { $regex: searchParams, $options: 'i' } }
+        ];
+      }
+
+      const result = await bookCollections.find(filter).toArray();
       res.send(result);
     })
 
@@ -82,6 +98,7 @@ async function run() {
       const result = await bookCollections.findOne(filter);
       res.send(result);
     })
+
 
     app.get('/all-reviews/:id', async (req, res) => {
       const id = req.params.id;
