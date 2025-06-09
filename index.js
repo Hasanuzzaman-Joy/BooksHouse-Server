@@ -98,7 +98,13 @@ async function run() {
       const result = await bookCollections.findOne(filter);
       res.send(result);
     })
-
+    
+    app.get('/popular-books', async (req, res) => {
+      const allBooks = await bookCollections.find().toArray();
+      allBooks.sort((a, b) => (b.upvote?.length || 0) - (a.upvote?.length || 0));
+      const result = allBooks.slice(0, 6);
+      res.send(result);
+    });
 
     app.get('/all-reviews/:id', async (req, res) => {
       const id = req.params.id;
