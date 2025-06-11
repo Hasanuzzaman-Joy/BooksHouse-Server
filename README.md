@@ -21,6 +21,7 @@
 ## 🚀 Features
 - Add, update, or delete books
 - Leave reviews on books (with rating and comments)
+- View, update, or delete individual reviews
 - Fetch books by category or search query
 - Filter recent books
 - Secure routes with JWT-based authentication
@@ -96,4 +97,4 @@ DELETE /reviews/:id
 
 ---
 
-## Made with ❤️ by Hasanuzzaman Joy
+### Made with ❤️ by Hasanuzzaman Joy
