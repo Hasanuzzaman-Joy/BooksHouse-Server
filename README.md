@@ -24,7 +24,7 @@
 - View, update, or delete individual reviews
 - Fetch books by category or search query
 - Filter recent books
-- Secure routes with JWT-based authentication
+- Secure routes with token based authentication
 
 ---
 
