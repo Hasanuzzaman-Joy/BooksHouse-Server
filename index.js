@@ -96,13 +96,37 @@ async function run() {
       const result = await bookCollections.findOne(filter);
       res.send(result);
     })
-    
+
+
+    app.get('/update-book/:id', verifyToken, verifyTokenEmail, async (req, res) => {
+      const id = req.params.id;
+      let filter = { _id: new ObjectId(id) };
+      const result = await bookCollections.findOne(filter);
+
+      if (!result) {
+        return res.status(401).send({ message: 'Book not found' });
+      }
+
+      if (result.email !== req.decoded.email) {
+        return res.status(403).send({ message: 'Access forbidden: Email does not match authenticated user.' });
+      }
+
+      res.send(result);
+    })
+
     app.get('/popular-books', async (req, res) => {
       const allBooks = await bookCollections.find().toArray();
       allBooks.sort((a, b) => (b.upvote?.length || 0) - (a.upvote?.length || 0));
       const result = allBooks.slice(0, 6);
       res.send(result);
     });
+
+    app.get('/categories/:category', async (req, res) => {
+      const category = req.params.category;
+      const filter = { book_category: { $regex: new RegExp(`^${category}$`, 'i') } };
+      const result = await bookCollections.find(filter).toArray();
+      res.send(result);
+    })
 
     app.get('/all-reviews/:id', async (req, res) => {
       const id = req.params.id;
@@ -111,8 +135,11 @@ async function run() {
       res.send(result)
     })
 
-    app.post('/add-book', async (req, res) => {
+    app.post('/add-book', verifyToken, verifyTokenEmail, async (req, res) => {
       const data = req.body;
+      if (data.email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden: Email mismatch" });
+      }
       data.total_page = parseInt(data.total_page);
       const result = await bookCollections.insertOne(data);
       res.send(result);
@@ -137,8 +164,11 @@ async function run() {
     });
 
 
-    app.patch('/update-book/:id', async (req, res) => {
+    app.patch('/update-book/:id', verifyToken, verifyTokenEmail, async (req, res) => {
       const data = req.body;
+      if (data.email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden: Email mismatch" });
+      }
       const id = req.params.id;
       let filter = { _id: new ObjectId(id) };
       const doc = {
@@ -169,7 +199,7 @@ async function run() {
 
     app.patch('/book/:id', async (req, res) => {
       const data = req.body;
-      const id = req.params.id; //data.id
+      const id = req.params.id;
       const readingStatus = data.status;
       const filter = { _id: new ObjectId(id) };
 
