@@ -230,9 +230,19 @@ async function run() {
       res.send(result);
     })
 
-    app.delete('/books/:id', async (req, res) => {
+    app.delete('/books/:id', verifyToken, verifyTokenEmail, async (req, res) => {
       const id = req.params.id;
       let filter = { _id: new ObjectId(id) };
+
+      const book = await bookCollections.findOne(filter);
+
+      if (!book) {
+        return res.status(401).send({ message: "Book not found" });
+      }
+      if (book.email !== req.decoded.email) {
+        return res.status(403).send({ message: "Forbidden: You are not authorized to delete this book." });
+      }
+
       const result = await bookCollections.deleteOne(filter);
       res.send(result);
     })
@@ -246,8 +256,6 @@ async function run() {
   }
 
   finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 run().catch(console.dir);
