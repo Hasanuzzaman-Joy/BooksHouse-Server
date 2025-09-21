@@ -1,10 +1,10 @@
-require('dotenv').config();
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+require("dotenv").config();
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const admin = require("firebase-admin");
-const express = require('express');
+const express = require("express");
 const app = express();
 const port = process.env.PORT || 5000;
-const cors = require('cors')
+const cors = require("cors");
 
 // Middlewares
 app.use(cors());
@@ -12,37 +12,44 @@ app.use(express.json());
 
 const verifyToken = async (req, res, next) => {
   const authHeaders = req.headers.authorization;
-  if (!authHeaders || !authHeaders.startsWith('Bearer ')) {
-    return res.status(401).send({ message: 'Access denied: Invalid token provided.' })
+  if (!authHeaders || !authHeaders.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .send({ message: "Access denied: Invalid token provided." });
   }
 
-  const token = authHeaders.split(' ')[1];
+  const token = authHeaders.split(" ")[1];
 
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.decoded = decoded;
-  }
-  catch (error) {
-    return res.status(401).send({ message: 'Access denied: Failed to verify token.' });
+  } catch (error) {
+    return res
+      .status(401)
+      .send({ message: "Access denied: Failed to verify token." });
   }
   next();
-}
+};
 
 const verifyTokenEmail = async (req, res, next) => {
   if (req.query.email) {
     if (req.query.email !== req.decoded.email) {
-      res.status(403).send({ message: 'Access forbidden: Email does not match authenticated user.' })
+      res.status(403).send({
+        message: "Access forbidden: Email does not match authenticated user.",
+      });
     }
   }
-  next()
-}
+  next();
+};
 
 // Firebase
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf-8');
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf-8"
+);
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
 // MongoDB
@@ -53,89 +60,117 @@ const client = new MongoClient(uri, {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
 async function run() {
   try {
+    const bookCollections = client.db("booksDB").collection("books");
+    const reviewCollections = client.db("booksDB").collection("reviews");
 
-    const bookCollections = client.db('booksDB').collection('books');
-    const reviewCollections = client.db('booksDB').collection('reviews');
-
-    app.get('/all-books', async (req, res) => {
+    // All Books with Pagination and Filtering
+    app.get("/all-books", async (req, res) => {
       const filteredStatus = req.query.filteredStatus;
       const searchParams = req.query.searchParams;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 9;
+      const skip = (page - 1) * limit;
 
       const filter = {};
-
-      if (filteredStatus) {
-        filter.reading_status = filteredStatus;
-      }
-
+      if (filteredStatus) filter.reading_status = filteredStatus;
       if (searchParams) {
         filter.$or = [
-          { book_title: { $regex: searchParams, $options: 'i' } },
-          { book_author: { $regex: searchParams, $options: 'i' } }
+          { book_title: { $regex: searchParams, $options: "i" } },
+          { book_author: { $regex: searchParams, $options: "i" } },
         ];
       }
 
-      const result = await bookCollections.find(filter).toArray();
-      res.send(result);
-    })
+      const totalBooks = await bookCollections.countDocuments(filter);
+      const result = await bookCollections
+        .find(filter)
+        .skip(skip)
+        .limit(limit)
+        .toArray();
 
-    app.get('/books', verifyToken, verifyTokenEmail, async (req, res) => {
+      res.json({
+        books: result,
+        totalBooks,
+        currentPage: page,
+        totalPages: Math.ceil(totalBooks / limit),
+      });
+    });
+
+    // User's Books
+    app.get("/books", verifyToken, verifyTokenEmail, async (req, res) => {
       const email = req.query.email;
       let query = { email: email };
       const result = await bookCollections.find(query).toArray();
       res.send(result);
-    })
+    });
 
-    app.get('/book/:id', async (req, res) => {
+    // Single Book
+    app.get("/book/:id", async (req, res) => {
       const id = req.params.id;
       let filter = { _id: new ObjectId(id) };
       const result = await bookCollections.findOne(filter);
       res.send(result);
-    })
+    });
 
+    // Get Book for Update with Authorization
+    app.get(
+      "/update-book/:id",
+      verifyToken,
+      verifyTokenEmail,
+      async (req, res) => {
+        const id = req.params.id;
+        let filter = { _id: new ObjectId(id) };
+        const result = await bookCollections.findOne(filter);
 
-    app.get('/update-book/:id', verifyToken, verifyTokenEmail, async (req, res) => {
-      const id = req.params.id;
-      let filter = { _id: new ObjectId(id) };
-      const result = await bookCollections.findOne(filter);
+        if (!result) {
+          return res.status(401).send({ message: "Book not found" });
+        }
 
-      if (!result) {
-        return res.status(401).send({ message: 'Book not found' });
+        if (result.email !== req.decoded.email) {
+          return res.status(403).send({
+            message:
+              "Access forbidden: Email does not match authenticated user.",
+          });
+        }
+
+        res.send(result);
       }
+    );
 
-      if (result.email !== req.decoded.email) {
-        return res.status(403).send({ message: 'Access forbidden: Email does not match authenticated user.' });
-      }
-
-      res.send(result);
-    })
-
-    app.get('/popular-books', async (req, res) => {
+    // Popular Books
+    app.get("/popular-books", async (req, res) => {
       const allBooks = await bookCollections.find().toArray();
-      allBooks.sort((a, b) => (b.upvote?.length || 0) - (a.upvote?.length || 0));
+      allBooks.sort(
+        (a, b) => (b.upvote?.length || 0) - (a.upvote?.length || 0)
+      );
       const result = allBooks.slice(0, 6);
       res.send(result);
     });
 
-    app.get('/categories/:category', async (req, res) => {
+    // Book Categories
+    app.get("/categories/:category", async (req, res) => {
       const category = req.params.category;
-      const filter = { book_category: { $regex: new RegExp(`^${category}$`, 'i') } };
+      const filter = {
+        book_category: { $regex: new RegExp(`^${category}$`, "i") },
+      };
       const result = await bookCollections.find(filter).toArray();
       res.send(result);
-    })
+    });
 
-    app.get('/all-reviews/:id', async (req, res) => {
+    // Reviews
+    app.get("/all-reviews/:id", async (req, res) => {
       const id = req.params.id;
       let filter = { reviewedBookId: id };
       const result = await reviewCollections.find(filter).toArray();
-      res.send(result)
-    })
+      res.send(result);
+    });
 
-    app.post('/add-book', verifyToken, verifyTokenEmail, async (req, res) => {
+    // Add Book
+    app.post("/add-book", verifyToken, verifyTokenEmail, async (req, res) => {
       const data = req.body;
       if (data.email !== req.decoded.email) {
         return res.status(403).send({ message: "Forbidden: Email mismatch" });
@@ -143,42 +178,51 @@ async function run() {
       data.total_page = parseInt(data.total_page);
       const result = await bookCollections.insertOne(data);
       res.send(result);
-    })
+    });
 
-    app.post('/reviews', async (req, res) => {
+    // Add Review
+    app.post("/reviews", async (req, res) => {
       const review = req.body;
       const email = review.reviewerEmail;
       const commentedBook = review.reviewedBookId;
 
       const existingReview = await reviewCollections.findOne({
         reviewerEmail: email,
-        reviewedBookId: commentedBook
+        reviewedBookId: commentedBook,
       });
 
       if (existingReview) {
-        return res.send({ message: "You have already added a review for this book" });
+        return res.send({
+          message: "You have already added a review for this book",
+        });
       }
 
       const result = await reviewCollections.insertOne(review);
       res.send(result);
     });
 
-
-    app.patch('/update-book/:id', verifyToken, verifyTokenEmail, async (req, res) => {
-      const data = req.body;
-      if (data.email !== req.decoded.email) {
-        return res.status(403).send({ message: "Forbidden: Email mismatch" });
+    // Update Book with Authorization
+    app.patch(
+      "/update-book/:id",
+      verifyToken,
+      verifyTokenEmail,
+      async (req, res) => {
+        const data = req.body;
+        if (data.email !== req.decoded.email) {
+          return res.status(403).send({ message: "Forbidden: Email mismatch" });
+        }
+        const id = req.params.id;
+        let filter = { _id: new ObjectId(id) };
+        const doc = {
+          $set: data,
+        };
+        const result = await bookCollections.updateOne(filter, doc);
+        res.send(result);
       }
-      const id = req.params.id;
-      let filter = { _id: new ObjectId(id) };
-      const doc = {
-        $set: data
-      }
-      const result = await bookCollections.updateOne(filter, doc);
-      res.send(result);
-    })
+    );
 
-    app.patch('/upvote/:id', async (req, res) => {
+    // Upvote Book
+    app.patch("/upvote/:id", async (req, res) => {
       const { email } = req.body;
       const id = req.params.id;
 
@@ -186,18 +230,19 @@ async function run() {
       const book = await bookCollections.findOne(filter);
 
       if (book?.email === email) {
-        return res.send({ message: 'You cannot upvote your own book' });
+        return res.send({ message: "You cannot upvote your own book" });
       }
 
       const updateDoc = {
-        $push: { upvote: email }
+        $push: { upvote: email },
       };
 
       const result = await bookCollections.updateOne(filter, updateDoc);
       res.send(result);
     });
 
-    app.patch('/book/:id', async (req, res) => {
+    // Update Reading Status
+    app.patch("/book/:id", async (req, res) => {
       const data = req.body;
       const id = req.params.id;
       const readingStatus = data.status;
@@ -205,15 +250,16 @@ async function run() {
 
       const doc = {
         $set: {
-          reading_status: readingStatus
-        }
-      }
+          reading_status: readingStatus,
+        },
+      };
 
       const result = await bookCollections.updateOne(filter, doc);
       res.send(result);
-    })
+    });
 
-    app.patch('/update-review/:id', async (req, res) => {
+    // Update Review
+    app.patch("/update-review/:id", async (req, res) => {
       const review = req.body;
       const id = req.params.id;
 
@@ -222,45 +268,51 @@ async function run() {
 
       const doc = {
         $set: {
-          comment: newReview
-        }
-      }
+          comment: newReview,
+        },
+      };
 
       const result = await reviewCollections.updateOne(filter, doc);
       res.send(result);
-    })
+    });
 
-    app.delete('/books/:id', verifyToken, verifyTokenEmail, async (req, res) => {
-      const id = req.params.id;
-      let filter = { _id: new ObjectId(id) };
+    // Delete Book with Authorization
+    app.delete(
+      "/books/:id",
+      verifyToken,
+      verifyTokenEmail,
+      async (req, res) => {
+        const id = req.params.id;
+        let filter = { _id: new ObjectId(id) };
 
-      const book = await bookCollections.findOne(filter);
+        const book = await bookCollections.findOne(filter);
 
-      if (!book) {
-        return res.status(401).send({ message: "Book not found" });
+        if (!book) {
+          return res.status(401).send({ message: "Book not found" });
+        }
+        if (book.email !== req.decoded.email) {
+          return res.status(403).send({
+            message: "Forbidden: You are not authorized to delete this book.",
+          });
+        }
+
+        const result = await bookCollections.deleteOne(filter);
+        res.send(result);
       }
-      if (book.email !== req.decoded.email) {
-        return res.status(403).send({ message: "Forbidden: You are not authorized to delete this book." });
-      }
+    );
 
-      const result = await bookCollections.deleteOne(filter);
-      res.send(result);
-    })
-
-    app.delete('/reviews/:id', async (req, res) => {
+    // Delete Review
+    app.delete("/reviews/:id", async (req, res) => {
       const id = req.params.id;
       let filter = { _id: new ObjectId(id) };
       const result = await reviewCollections.deleteOne(filter);
       res.send(result);
-    })
-  }
-
-  finally {
+    });
+  } finally {
   }
 }
 run().catch(console.dir);
 
-
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
-})
+  console.log(`Example app listening on port ${port}`);
+});
