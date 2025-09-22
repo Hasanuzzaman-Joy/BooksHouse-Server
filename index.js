@@ -4,6 +4,7 @@ const admin = require("firebase-admin");
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 5000;
+const nodemailer = require("nodemailer");
 const cors = require("cors");
 
 // Middlewares
@@ -199,6 +200,43 @@ async function run() {
 
       const result = await reviewCollections.insertOne(review);
       res.send(result);
+    });
+
+    // Contact form
+    app.post("/contact", async (req, res) => {
+      const { name, email, message } = req.body;
+
+      try {
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+
+        // Email options
+        const mailOptions = {
+          from: `"BooksHouse Contact" <${process.env.EMAIL_USER}>`,
+          to: process.env.EMAIL_USER,
+          subject: `BooksHouse Form Message from ${name}`,
+          html: `
+        <h3>New Message from BooksHouse Contact Form</h3>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Message:</strong><br/> ${message}</p>
+      `,
+        };
+
+        // Send email
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: "Message sent successfully!" });
+      } catch (error) {
+        // console.error("Error sending email:", error);
+        res.status(500).json({ error: "Failed to send message" });
+      }
     });
 
     // Update Book with Authorization
